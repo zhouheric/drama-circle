@@ -23,6 +23,7 @@ const LEGACY_STORAGE_KEY = "drama-circle-state-v2";
 const THEME_STORAGE_KEY = "drama-circle-theme";
 const DEFAULT_CIRCLE_ID = "main";
 const DEMO_USER_IDS = new Set(["maya", "jules", "nina", "sam"]);
+const TITLE_SEARCH_VIEWS = new Set(["my-reviews", "matches", "friends"]);
 const PROVIDER_CONFIG = {
   mdlApiKey: "",
   tmdbProxyUrl: "https://us-central1-dramacircle-aa198.cloudfunctions.net/tmdbSearch",
@@ -139,6 +140,8 @@ let lookupAbortController = null;
 let lookupTimer = null;
 let selectedFriendId = "";
 let myReviewsMode = "cards";
+let circlePicksMode = "shared";
+let reviewSubmitFeedback = "";
 let resetSortConfirming = false;
 let draggedReviewDramaId = "";
 let suppressReviewClick = false;
@@ -173,6 +176,8 @@ const els = {
   viewTitle: document.querySelector("#view-title"),
   viewDescription: document.querySelector("#view-description"),
   viewContent: document.querySelector("#view-content"),
+  viewSearch: document.querySelector("#view-search"),
+  viewSearchInput: document.querySelector("#view-search-input"),
   themeToggle: document.querySelector("#theme-toggle"),
   nightModeStyles: document.querySelector("#night-mode-styles"),
   discoverFilters: document.querySelector("#discover-filters"),
@@ -191,6 +196,7 @@ const els = {
   ratingOutput: document.querySelector("#rating-output"),
   recommendation: document.querySelector("#recommendation"),
   watchStatus: document.querySelector("#watch-status"),
+  reviewSubmitButton: document.querySelector("#review-submit-button"),
   personSearchForms: document.querySelectorAll(".person-search"),
   favoritePersonCurrent: document.querySelector("#favorite-person-current"),
   favoritePersonResults: document.querySelector("#favorite-person-results"),
@@ -589,6 +595,19 @@ function reviewsByUser(userId) {
   return state.reviews.filter((review) => review.userId === userId);
 }
 
+function profilePickCompletion(user) {
+  return [user.favoritePerson, user.hottestPerson, user.goatDrama].filter(Boolean).length;
+}
+
+function compareFriendProfiles(a, b) {
+  const completionDelta = profilePickCompletion(b) - profilePickCompletion(a);
+  if (completionDelta) return completionDelta;
+  const dramaDelta = new Set(reviewsByUser(b.id).map((review) => review.dramaId)).size
+    - new Set(reviewsByUser(a.id).map((review) => review.dramaId)).size;
+  if (dramaDelta) return dramaDelta;
+  return a.name.localeCompare(b.name);
+}
+
 function comparisonsByUser(userId) {
   return state.comparisons.filter((comparison) => comparison.userId === userId);
 }
@@ -705,14 +724,17 @@ function nextPairwiseDramas(dramas) {
 }
 
 function dramasMatchingSearch(dramas) {
-  const term = searchTerm.trim().toLowerCase();
+  const term = titleSearchIsActive() ? searchTerm.trim().toLowerCase() : "";
   if (!term) return dramas;
 
   return dramas.filter((drama) => {
-    const friendNames = dramaReviews(drama.id).map((review) => userName(review.userId));
-    const searchable = [drama.title, drama.summary, ...drama.genres, ...friendNames].join(" ").toLowerCase();
-    return searchable.includes(term);
+    return drama.title.toLowerCase().includes(term);
   });
+}
+
+function titleSearchIsActive() {
+  if (activeView === "my-reviews" && myReviewsMode === "pairwise") return false;
+  return TITLE_SEARCH_VIEWS.has(activeView);
 }
 
 function dramaYear(drama) {
@@ -1080,8 +1102,17 @@ function renderDramaCard(drama, options = {}) {
   const goatOwners = goatOwnersForDrama(drama.id);
   const poster = card.querySelector(".poster");
 
+  card.classList.toggle("is-compact-scan", Boolean(options.compactCard));
+  card.classList.toggle("has-centered-title", Boolean(options.centerTitle));
+  if (options.rankLabel) {
+    const rankBadge = document.createElement("span");
+    rankBadge.className = "recommendation-rank";
+    rankBadge.textContent = options.rankLabel;
+    card.append(rankBadge);
+  }
   renderPoster(poster, drama);
-  renderTagList(card.querySelector(".genres"), [...(drama.meta ?? []), ...drama.genres], 5, options.highlightCastPicks);
+  const genres = card.querySelector(".genres");
+  renderTagList(genres, [...(drama.meta ?? []), ...drama.genres], 5, options.highlightCastPicks);
   card.querySelector("h3").textContent = drama.title;
   const scorePill = card.querySelector(".score-pill");
   scorePill.textContent = options.scoreLabel ?? (ratedReviews.length ? averageRating(ratedReviews).toFixed(1) : "New");
@@ -1096,10 +1127,20 @@ function renderDramaCard(drama, options = {}) {
   consensus.classList.toggle("is-empty", !consensus.textContent);
   if (goatOwners.length && !options.hideGoatCallout) {
     const goatCallout = document.createElement("p");
-    goatCallout.className = "goat-callout";
+    goatCallout.className = options.moveGoatCalloutToCorner
+      ? "goat-callout goat-corner-tag"
+      : options.moveGoatCalloutToTags
+        ? `goat-callout goat-tag-chip${options.largeTagGoatCallout ? " is-large" : ""}`
+        : "goat-callout";
     goatCallout.textContent = ownerListText(goatOwners);
     card.classList.add("is-goat-drama");
-    card.querySelector(".card-body").insertBefore(goatCallout, card.querySelector(".review-row"));
+    if (options.moveGoatCalloutToCorner) {
+      card.append(goatCallout);
+    } else if (options.moveGoatCalloutToTags) {
+      genres.append(goatCallout);
+    } else {
+      card.querySelector(".card-body").insertBefore(goatCallout, card.querySelector(".review-row"));
+    }
   }
 
   const reviewRow = card.querySelector(".review-row");
@@ -1140,14 +1181,16 @@ function renderDramaCard(drama, options = {}) {
       );
       reviewRow.append(featured);
     }
-    reviews.forEach((review) => {
-      if (options.featuredReview?.review.userId === review.userId) return;
-      const pill = document.createElement("span");
-      pill.className = "friend-rating";
-      pill.dataset.tone = userTone(review.userId);
-      pill.textContent = `${userName(review.userId)} ${review.rating == null ? "No score" : Number(review.rating).toFixed(1)} · ${statusLabel(review.status)}`;
-      reviewRow.append(pill);
-    });
+    if (!options.hidePeerRatings) {
+      reviews.forEach((review) => {
+        if (options.featuredReview?.review.userId === review.userId) return;
+        const pill = document.createElement("span");
+        pill.className = "friend-rating";
+        pill.dataset.tone = userTone(review.userId);
+        pill.textContent = `${userName(review.userId)} ${review.rating == null ? "No score" : Number(review.rating).toFixed(1)} · ${statusLabel(review.status)}`;
+        reviewRow.append(pill);
+      });
+    }
   }
 
   if (currentReview) card.dataset.reviewedByMe = "true";
@@ -1236,7 +1279,7 @@ function renderPairwisePanel(dramas) {
   if (!pair) {
     const empty = document.createElement("div");
     empty.className = "empty-state";
-    empty.textContent = "No same-rating pairs to compare right now. Pairwise only appears when two or more watched dramas share the same score.";
+    empty.textContent = "Finished!";
     panel.append(empty);
     return panel;
   }
@@ -1284,6 +1327,7 @@ function renderPairwiseChoice(drama, opponent, side) {
   const meta = document.createElement("p");
   const title = document.createElement("h3");
   const review = latestReviewForUser(drama.id, state.activeUserId);
+  const score = scoreMetric("Your score", review?.rating == null ? "No score" : Number(review.rating).toFixed(1));
 
   choice.className = "pairwise-choice";
   choice.dataset.side = side;
@@ -1295,10 +1339,11 @@ function renderPairwiseChoice(drama, opponent, side) {
   choice.ariaLabel = `Choose ${drama.title} over ${opponent.title}`;
   poster.className = "poster";
   renderPoster(poster, drama);
+  body.className = "pairwise-choice-body";
   meta.className = "genres";
   renderTagList(meta, [...(drama.meta ?? []), ...drama.genres], 4);
   title.textContent = drama.title;
-  body.append(meta, title, scoreMetric("Your score", review?.rating == null ? "No score" : Number(review.rating).toFixed(1)));
+  body.append(meta, title, score);
   choice.append(poster, body);
   return choice;
 }
@@ -1329,11 +1374,14 @@ function renderDiscover() {
   }
 
   els.viewContent.replaceChildren(
-    ...dramas.map((drama) => {
+    ...dramas.map((drama, index) => {
       const item = ranked.find((rankedItem) => rankedItem.drama.id === drama.id);
       return renderDramaCard(drama, {
         linkToDetails: true,
         highlightCastPicks: true,
+        rankLabel: `#${index + 1}`,
+        moveGoatCalloutToTags: true,
+        centerTitle: true,
         scoreLabel: item.ratedReviews.length ? item.average.toFixed(1) : "Taste",
         scoreSubLabel: consensusRecommendation(item.reviews),
         detailText: discoverSummary(item),
@@ -1349,7 +1397,9 @@ function renderMyReviews() {
   const dramas = dramasMatchingSearch(allDramas);
 
   if (!dramas.length) {
-    renderEmpty("You have not reviewed a matching drama yet. Use the review form above to build your list.");
+    renderEmpty(searchTerm.trim()
+      ? "No reviewed drama titles match that search."
+      : "You have not reviewed a matching drama yet. Use the review form above to build your list.");
     return;
   }
 
@@ -1363,23 +1413,22 @@ function renderMyReviews() {
     toolbar,
     ...dramas.map((drama) => {
       const review = latestReviewForUser(drama.id, state.activeUserId);
-      const friendAverage = averageFriendRating(drama.id);
-      const comparison =
-        friendAverage === null
-          ? "No friend average yet"
-          : `Friend average ${friendAverage.toFixed(1)}`;
       const ownScore = review.rating == null ? "No score" : Number(review.rating).toFixed(1);
       return renderDramaCard(drama, {
         action: "edit-review",
         draggable: true,
+        compactCard: true,
+        centerTitle: true,
         hideGoatCallout: true,
         scoreLabel: ownScore,
+        scoreSubLabel: recommendationLabel(review.recommendation),
         featuredReview: {
           review,
           ownerName: "You",
           rank: rankByDramaId.get(drama.id),
         },
-        detailText: `${reviewReadout(review)} ${ownScore === "No score" ? "" : `Friend comparison: ${comparison}.`} Click to edit or drag to reorder.`.replace(/\s+/g, " ").trim(),
+        hidePeerRatings: true,
+        detailText: "",
       });
     }),
   );
@@ -1387,43 +1436,30 @@ function renderMyReviews() {
 
 function renderMatches() {
   setViewHeader("matches");
-  const dramas = dramasMatchingSearch(
-    state.dramas.filter((drama) => {
-      const reviewers = new Set(dramaReviews(drama.id).map((review) => review.userId));
-      return reviewers.size > 1;
-    }),
-  ).sort((a, b) => {
-    const aRated = dramaReviews(a.id).filter((review) => review.rating != null);
-    const bRated = dramaReviews(b.id).filter((review) => review.rating != null);
-    const aReviewerCount = new Set(dramaReviews(a.id).map((review) => review.userId)).size;
-    const bReviewerCount = new Set(dramaReviews(b.id).map((review) => review.userId)).size;
-    const aAverage = aRated.length ? averageRating(aRated) : -1;
-    const bAverage = bRated.length ? averageRating(bRated) : -1;
-    if (bReviewerCount !== aReviewerCount) return bReviewerCount - aReviewerCount;
-    if (bAverage !== aAverage) return bAverage - aAverage;
-    if (bRated.length !== aRated.length) return bRated.length - aRated.length;
-    return dramaReviews(b.id).length - dramaReviews(a.id).length;
-  });
+  const toolbar = renderCirclePicksToolbar();
+  const dramas = dramasMatchingSearch(state.dramas.filter(circlePickModeFilter)).sort(compareCirclePickDramas);
 
   if (!dramas.length) {
-    renderEmpty("No circle picks yet. Once two or more people review the same drama, it will show up here.");
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = searchTerm.trim()
+      ? "No circle pick titles match that search."
+      : circlePicksEmptyText();
+    els.viewContent.replaceChildren(toolbar, empty);
     return;
   }
 
   els.viewContent.replaceChildren(
+    toolbar,
     ...dramas.map((drama) => {
       const reviews = dramaReviews(drama.id);
-      const reviewerCount = new Set(reviews.map((review) => review.userId)).size;
-      const statuses = reviews.reduce((counts, review) => {
-        counts[review.status] = (counts[review.status] ?? 0) + 1;
-        return counts;
-      }, {});
-      const finishedCount = statuses.finished ?? 0;
       return renderDramaCard(drama, {
         linkToDetails: true,
         highlightCastPicks: true,
         showDetails: true,
         compactDetails: true,
+        compactCard: true,
+        moveGoatCalloutToTags: true,
         scoreLabel: reviews.some((review) => review.rating != null) ? averageRating(reviews).toFixed(1) : "N/A",
         scoreSubLabel: consensusRecommendation(reviews),
         detailText: "",
@@ -1432,9 +1468,60 @@ function renderMatches() {
   );
 }
 
+function renderCirclePicksToolbar() {
+  const toolbar = document.createElement("div");
+  const modeGroup = document.createElement("div");
+  const modes = [
+    ["shared", "Shared"],
+    ["all", "All"],
+    ["singles", "Singles"],
+  ];
+
+  toolbar.className = "list-toolbar circle-picks-toolbar";
+  modeGroup.className = "segmented-control";
+  modes.forEach(([mode, label]) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.circleMode = mode;
+    button.className = circlePicksMode === mode ? "active" : "";
+    button.textContent = label;
+    modeGroup.append(button);
+  });
+  toolbar.append(modeGroup);
+  return toolbar;
+}
+
+function circlePickModeFilter(drama) {
+  const reviewerCount = new Set(dramaReviews(drama.id).map((review) => review.userId)).size;
+  if (circlePicksMode === "singles") return reviewerCount === 1;
+  if (circlePicksMode === "all") return reviewerCount > 0;
+  return reviewerCount > 1;
+}
+
+function circlePicksEmptyText() {
+  if (circlePicksMode === "all") return "No friend reviews yet.";
+  if (circlePicksMode === "singles") return "No single-review dramas yet.";
+  return "No shared picks yet. Once two or more people review the same drama, it will show up here.";
+}
+
+function compareCirclePickDramas(a, b) {
+  const aRated = dramaReviews(a.id).filter((review) => review.rating != null);
+  const bRated = dramaReviews(b.id).filter((review) => review.rating != null);
+  const aReviewerCount = new Set(dramaReviews(a.id).map((review) => review.userId)).size;
+  const bReviewerCount = new Set(dramaReviews(b.id).map((review) => review.userId)).size;
+  const aAverage = aRated.length ? averageRating(aRated) : -1;
+  const bAverage = bRated.length ? averageRating(bRated) : -1;
+  if (bReviewerCount !== aReviewerCount) return bReviewerCount - aReviewerCount;
+  if (bAverage !== aAverage) return bAverage - aAverage;
+  if (bRated.length !== aRated.length) return bRated.length - aRated.length;
+  const reviewDelta = dramaReviews(b.id).length - dramaReviews(a.id).length;
+  if (reviewDelta) return reviewDelta;
+  return a.title.localeCompare(b.title);
+}
+
 function renderFriendList() {
   setViewHeader("friends");
-  const reviewedProfiles = state.users.filter((user) => reviewsByUser(user.id).length > 0);
+  const reviewedProfiles = state.users.filter((user) => reviewsByUser(user.id).length > 0).sort(compareFriendProfiles);
   if (!reviewedProfiles.length) {
     renderEmpty("No reviewed profiles yet. Add a review, then profiles with drama lists will show up here.");
     return;
@@ -1447,12 +1534,6 @@ function renderFriendList() {
   const toolbar = document.createElement("div");
   const label = document.createElement("label");
   const select = document.createElement("select");
-  const selectedFriend = state.users.find((user) => user.id === selectedFriendId);
-  const friendReviews = reviewsByUser(selectedFriendId);
-  const friendReviewIds = new Set(friendReviews.map((review) => review.dramaId));
-  const rankedFriendDramas = state.dramas.filter((drama) => friendReviewIds.has(drama.id)).sort(compareReviewedDramasForUser(selectedFriendId));
-  const rankByDramaId = new Map(rankedFriendDramas.map((drama, index) => [drama.id, index + 1]));
-  const dramas = dramasMatchingSearch(rankedFriendDramas);
 
   toolbar.className = "list-toolbar";
   label.textContent = "Browse a profile";
@@ -1473,13 +1554,21 @@ function renderFriendList() {
     render();
   });
 
+  const selectedFriend = state.users.find((user) => user.id === selectedFriendId);
+  const friendReviews = reviewsByUser(selectedFriendId);
+  const friendReviewIds = new Set(friendReviews.map((review) => review.dramaId));
+  const rankedFriendDramas = state.dramas.filter((drama) => friendReviewIds.has(drama.id)).sort(compareReviewedDramasForUser(selectedFriendId));
+  const rankByDramaId = new Map(rankedFriendDramas.map((drama, index) => [drama.id, index + 1]));
+  const dramas = dramasMatchingSearch(rankedFriendDramas);
   const profile = renderFriendProfile(selectedFriend, friendReviews);
   const profileStats = renderFriendStats(friendReviews, selectedFriendId);
 
   if (!dramas.length) {
     const empty = document.createElement("div");
     empty.className = "empty-state";
-    empty.textContent = `${selectedFriend?.name ?? "This friend"} has not reviewed a matching drama yet.`;
+    empty.textContent = searchTerm.trim()
+      ? `No drama titles in ${selectedFriend?.name ?? "this profile"}'s list match that search.`
+      : `${selectedFriend?.name ?? "This friend"} has not reviewed a matching drama yet.`;
     els.viewContent.replaceChildren(toolbar, profile, profileStats, empty);
     return;
   }
@@ -1493,13 +1582,17 @@ function renderFriendList() {
       return renderDramaCard(drama, {
         linkToDetails: true,
         highlightCastPicks: true,
+        compactCard: true,
+        centerTitle: true,
         scoreLabel: review.rating == null ? "No score" : Number(review.rating).toFixed(1),
+        scoreSubLabel: recommendationLabel(review.recommendation),
+        moveGoatCalloutToCorner: true,
         featuredReview: {
           review,
           ownerName: selectedFriend.name,
           rank: rankByDramaId.get(drama.id),
         },
-        detailText: reviewReadout(review, selectedFriend.name),
+        detailText: "",
       });
     }),
   );
@@ -1605,11 +1698,12 @@ function renderSelectedDrama() {
     els.selectedDrama.textContent = "Search for a drama and select the right result.";
     els.selectedDramaId.value = "";
     els.selectedDramaSource.textContent = "Choose a title";
+    updateReviewSubmitButton();
     return;
   }
 
   const currentReview = latestReviewForUser(selectedDrama.id, state.activeUserId);
-  const friendAverage = averageFriendRating(selectedDrama.id);
+  const friendAverage = currentReview ? averageFriendRating(selectedDrama.id) : null;
   if (currentReview) {
     els.rating.value = currentReview.rating ?? 8;
     els.ratingOutput.value = currentReview.rating == null ? "No score" : Number(currentReview.rating).toFixed(1);
@@ -1634,14 +1728,28 @@ function renderSelectedDrama() {
   compare.className = "score-compare";
   compare.append(
     scoreMetric("Your score", currentReview?.rating == null ? "New" : Number(currentReview.rating).toFixed(1)),
-    scoreMetric("Friend avg", friendAverage === null ? "None" : friendAverage.toFixed(1)),
   );
+  if (currentReview) {
+    compare.append(scoreMetric("Friend avg", friendAverage === null ? "None" : friendAverage.toFixed(1)));
+  }
   info.append(tags, title, compare, summary);
 
   els.selectedDrama.className = "selected-drama";
   els.selectedDrama.replaceChildren(poster, info);
   els.selectedDramaId.value = selectedDrama.id;
   els.selectedDramaSource.textContent = selectedDrama.source;
+  updateReviewSubmitButton(currentReview);
+}
+
+function updateReviewSubmitButton(currentReview = selectedDrama ? latestReviewForUser(selectedDrama.id, state.activeUserId) : null) {
+  if (!els.reviewSubmitButton) return;
+  els.reviewSubmitButton.classList.toggle("is-saved", Boolean(reviewSubmitFeedback));
+  els.reviewSubmitButton.disabled = Boolean(reviewSubmitFeedback);
+  if (reviewSubmitFeedback) {
+    els.reviewSubmitButton.textContent = reviewSubmitFeedback;
+    return;
+  }
+  els.reviewSubmitButton.textContent = currentReview ? "Update my review" : "Share my review";
 }
 
 function scoreMetric(label, value) {
@@ -1692,6 +1800,10 @@ function render() {
   renderSelectedDrama();
   els.discoverFilters?.classList.toggle("is-hidden", activeView !== "discover");
   els.topbar?.classList.toggle("has-discover-filters", activeView === "discover");
+  els.topbar?.classList.toggle("has-view-search", titleSearchIsActive());
+  els.viewSearch?.classList.toggle("is-hidden", !titleSearchIsActive());
+  if (els.viewSearchInput) els.viewSearchInput.value = searchTerm;
+  els.viewContent?.classList.toggle("is-filtering", titleSearchIsActive() && Boolean(searchTerm.trim()));
   document.querySelector(".review-panel")?.classList.toggle("is-hidden", activeView !== "my-reviews");
 
   document.querySelectorAll(".tab-button").forEach((button) => {
@@ -2064,6 +2176,11 @@ els.discoverFilters?.addEventListener("change", () => {
   render();
 });
 
+els.viewSearchInput?.addEventListener("input", () => {
+  searchTerm = els.viewSearchInput.value;
+  render();
+});
+
 els.themeToggle?.addEventListener("click", () => {
   const nextTheme = els.nightModeStyles?.disabled ? "night" : "normal";
   localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
@@ -2105,6 +2222,13 @@ els.viewContent.addEventListener("click", async (event) => {
   if (modeButton) {
     myReviewsMode = modeButton.dataset.mode;
     resetSortConfirming = false;
+    render();
+    return;
+  }
+
+  const circleModeButton = event.target.closest("[data-circle-mode]");
+  if (circleModeButton) {
+    circlePicksMode = circleModeButton.dataset.circleMode;
     render();
     return;
   }
@@ -2385,6 +2509,7 @@ document.querySelector(".profile-picks")?.addEventListener("click", (event) => {
 
 els.reviewForm.addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (reviewSubmitFeedback) return;
   if (!firebaseUser) {
     els.authDetail.textContent = "Sign in before sharing a synced review.";
     return;
@@ -2397,6 +2522,7 @@ els.reviewForm.addEventListener("submit", async (event) => {
 
   const drama = upsertDrama(selectedDrama);
   const existing = latestReviewForUser(drama.id, state.activeUserId);
+  const isUpdate = Boolean(existing);
   const status = els.watchStatus.value;
   const rating = status === "watching" || status === "planned" ? null : Number(els.rating.value);
   const recommendation = status === "planned" ? "" : els.recommendation.value;
@@ -2422,9 +2548,14 @@ els.reviewForm.addEventListener("submit", async (event) => {
     setDoc(circleDoc("reviews", review.id), serializeReview(review), { merge: true }),
   ]);
 
+  reviewSubmitFeedback = isUpdate ? "Updated!" : "Shared!";
   activeView = "my-reviews";
   saveState();
   render();
+  window.setTimeout(() => {
+    reviewSubmitFeedback = "";
+    render();
+  }, 1400);
 });
 
 selectedDrama = null;

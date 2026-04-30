@@ -124,13 +124,16 @@
               </select>
             </label>
           </div>
+          <label id="view-search" class="search-box view-search is-hidden">
+            <span class="sr-only">Search drama titles</span>
+            <input id="view-search-input" type="search" placeholder="Search drama titles" autocomplete="off" />
+          </label>
           <button id="theme-toggle" class="theme-toggle" type="button" aria-pressed="false">Night mode</button>
         </header>
 
         <section class="review-panel" aria-labelledby="review-panel-title">
           <div class="review-panel-heading">
             <div>
-              <p class="eyebrow">Only your profile can post this</p>
               <h2 id="review-panel-title">Add Your Drama</h2>
             </div>
             <span id="selected-drama-source" class="source-pill">Choose a title</span>
@@ -174,7 +177,7 @@
                 <option value="planned">Planned</option>
               </select>
             </label>
-            <button type="submit" class="primary-action">Share my review</button>
+            <button id="review-submit-button" type="submit" class="primary-action">Share my review</button>
           </form>
 
         </section>

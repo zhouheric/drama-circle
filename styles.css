@@ -308,6 +308,10 @@ textarea:focus {
   grid-template-columns: minmax(0, 1fr) auto;
 }
 
+.topbar.has-view-search:not(.has-discover-filters) {
+  grid-template-columns: minmax(14rem, 1fr) minmax(16rem, 28rem) auto;
+}
+
 .topbar h2 {
   margin-bottom: 0;
   font-size: clamp(2.05rem, 4vw, 3.55rem);
@@ -325,10 +329,26 @@ textarea:focus {
 }
 
 .search-box input {
+  width: 100%;
   min-height: 3rem;
   border-radius: 999px;
   padding: 0 1rem;
   box-shadow: 0 12px 32px rgba(31, 44, 54, 0.08);
+}
+
+.view-search {
+  min-width: 0;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .discover-filters {
@@ -423,7 +443,24 @@ textarea:focus {
   gap: 0.85rem;
 }
 
+.view-content.is-filtering .drama-card {
+  animation: filter-card-in 260ms ease both;
+}
+
+@keyframes filter-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.35rem) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 .drama-card {
+  position: relative;
   display: grid;
   grid-template-columns: 7rem minmax(0, 1fr);
   gap: 1rem;
@@ -434,6 +471,167 @@ textarea:focus {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(255, 255, 255, 0.91));
   box-shadow: var(--shadow);
+}
+
+.recommendation-rank {
+  position: absolute;
+  top: -0.55rem;
+  left: -0.55rem;
+  display: inline-grid;
+  place-items: center;
+  min-width: 2.45rem;
+  height: 2.45rem;
+  padding: 0 0.45rem;
+  border: 2px solid rgba(255, 255, 255, 0.95);
+  border-radius: 999px;
+  background: linear-gradient(135deg, #111827, #176d66);
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 900;
+  box-shadow: 0 12px 26px rgba(17, 24, 39, 0.22);
+  z-index: 2;
+}
+
+.drama-card.is-compact-scan {
+  grid-template-columns: 4.9rem minmax(0, 1fr);
+  align-items: center;
+  min-height: 0;
+  padding: 0.62rem 0.78rem;
+}
+
+.drama-card.is-compact-scan.is-draggable {
+  padding-bottom: 0.62rem;
+}
+
+.drama-card.is-compact-scan.is-draggable .card-body {
+  padding-right: 0;
+}
+
+.drama-card.is-compact-scan .card-body {
+  gap: 0.5rem;
+}
+
+.drama-card.is-compact-scan .card-heading h3 {
+  font-size: 1.24rem;
+  line-height: 1.06;
+}
+
+.drama-card.is-compact-scan.has-centered-title {
+  align-items: stretch;
+}
+
+.drama-card.is-compact-scan.has-centered-title .poster {
+  align-self: center;
+}
+
+.drama-card.is-compact-scan.has-centered-title .card-body {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  align-self: stretch;
+}
+
+.drama-card.is-compact-scan.has-centered-title .card-heading {
+  align-items: start;
+  gap: 0.8rem;
+  min-height: 0;
+}
+
+.drama-card.is-compact-scan.has-centered-title .card-heading > div {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  align-self: stretch;
+  gap: 0.24rem;
+  min-width: 0;
+}
+
+.drama-card.is-compact-scan.has-centered-title .card-heading h3 {
+  align-self: center;
+  text-align: left;
+}
+
+.drama-card.is-compact-scan.has-centered-title .score-pill {
+  align-self: start;
+}
+
+.drama-card.has-centered-title:not(.is-compact-scan) .card-heading > div {
+  display: grid;
+  grid-template-rows: auto minmax(2.2rem, 1fr);
+  gap: 0.4rem;
+  min-height: 4.6rem;
+}
+
+.drama-card.has-centered-title:not(.is-compact-scan) .card-heading h3 {
+  align-self: center;
+}
+
+.drama-card.is-compact-scan .genres {
+  gap: 0.18rem;
+}
+
+.drama-card.is-compact-scan .tag-chip {
+  min-height: 1.08rem;
+  padding: 0 0.34rem;
+  font-size: 0.54rem;
+}
+
+.drama-card.is-compact-scan .review-grid {
+  grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
+  gap: 0.38rem;
+}
+
+.drama-card.is-compact-scan .review-detail {
+  min-height: 3.8rem;
+  padding: 0.5rem;
+  gap: 0.3rem;
+}
+
+.drama-card.is-compact-scan .review-detail strong {
+  font-size: 0.82rem;
+}
+
+.drama-card.is-compact-scan .consensus {
+  font-size: 0.88rem;
+  line-height: 1.34;
+}
+
+.drama-card.is-compact-scan .friend-rating {
+  min-height: 1.55rem;
+  padding: 0 0.5rem;
+  font-size: 0.72rem;
+}
+
+.drama-card.is-compact-scan .score-pill {
+  min-width: 3.2rem;
+  min-height: 1.8rem;
+  padding: 0 0.58rem;
+  font-size: 0.82rem;
+}
+
+.drama-card.is-compact-scan .score-pill.has-sub-label {
+  min-width: 4rem;
+  padding: 0.3rem 0.58rem;
+}
+
+.drama-card.is-compact-scan .score-pill small {
+  font-size: 0.52rem;
+}
+
+.drama-card.is-compact-scan.is-draggable::after {
+  top: auto;
+  right: 0.58rem;
+  bottom: 0.5rem;
+  width: 1.45rem;
+  height: 1.45rem;
+  font-size: 0.72rem;
+  line-height: 1.24rem;
+  transform: none;
+}
+
+.drama-card.is-compact-scan .rec-pill,
+.drama-card.is-compact-scan .status-pill {
+  min-height: 1.45rem;
+  padding: 0 0.46rem;
+  font-size: 0.68rem;
 }
 
 .drama-card.is-goat-drama {
@@ -618,6 +816,33 @@ textarea:focus {
   font-weight: 850;
   line-height: 1.2;
   box-shadow: 0 8px 18px rgba(122, 79, 11, 0.1);
+}
+
+.goat-corner-tag {
+  position: absolute;
+  right: 0.7rem;
+  bottom: 0.58rem;
+  max-width: calc(100% - 1.4rem);
+  margin: 0;
+  font-size: 0.68rem;
+}
+
+.goat-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 1.08rem;
+  margin: 0;
+  padding: 0 0.48rem;
+  font-size: 0.54rem;
+  line-height: 1;
+}
+
+.goat-tag-chip.is-large {
+  min-height: 1.45rem;
+  padding: 0 0.68rem;
+  font-size: 0.82rem;
+  line-height: 1;
 }
 
 .tag-row {
@@ -1299,6 +1524,12 @@ output {
   color: #fff;
 }
 
+.primary-action.is-saved {
+  background: linear-gradient(135deg, var(--teal), #176d66);
+  color: #fff;
+  box-shadow: 0 0 0 3px rgba(36, 120, 111, 0.12);
+}
+
 .empty-state {
   padding: 2rem;
   border: 1px dashed #bcc6d4;
@@ -1412,6 +1643,10 @@ output {
   align-items: center;
 }
 
+.circle-picks-toolbar .segmented-control {
+  grid-template-columns: repeat(3, minmax(5rem, 1fr));
+}
+
 .segmented-control {
   display: inline-grid;
   grid-template-columns: repeat(2, minmax(5.5rem, 1fr));
@@ -1471,8 +1706,8 @@ output {
 
 .pairwise-panel {
   display: grid;
-  gap: 0.9rem;
-  padding: 1rem;
+  gap: 1.1rem;
+  padding: 1.15rem;
   border: 1px solid var(--line);
   border-radius: 0.5rem;
   background:
@@ -1493,16 +1728,16 @@ output {
 .pairwise-matchup {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.85rem;
+  gap: 1.15rem;
 }
 
 .pairwise-choice {
   display: grid;
-  grid-template-columns: 6rem minmax(0, 1fr);
-  gap: 0.8rem;
+  grid-template-columns: 7.2rem minmax(0, 1fr);
+  gap: 1.05rem;
   align-items: center;
-  min-height: 9rem;
-  padding: 0.75rem;
+  min-height: 10.5rem;
+  padding: 0.95rem;
   border: 1px solid #dfe5ed;
   border-radius: 0.5rem;
   background: #fff;
@@ -1516,20 +1751,44 @@ output {
 .pairwise-choice:hover,
 .pairwise-choice:focus {
   border-color: rgba(36, 120, 111, 0.58);
-  box-shadow: 0 14px 30px rgba(36, 120, 111, 0.12);
-  transform: translateY(-1px);
+  box-shadow:
+    0 0 0 3px rgba(36, 120, 111, 0.08),
+    0 18px 36px rgba(36, 120, 111, 0.13);
+  transform: translateY(-2px);
+}
+
+.pairwise-choice-body {
+  display: grid;
+  align-content: center;
+  gap: 0.65rem;
+  min-width: 0;
 }
 
 .pairwise-choice h3 {
   margin: 0;
-  font-size: 1.2rem;
+  font-size: 1.35rem;
   line-height: 1.12;
+}
+
+.pairwise-choice .genres {
+  gap: 0.22rem;
+}
+
+.pairwise-choice .tag-chip {
+  min-height: 1.18rem;
+  padding: 0 0.4rem;
+  font-size: 0.58rem;
+}
+
+.pairwise-choice .score-metric {
+  width: max-content;
 }
 
 .pairwise-actions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.55rem;
+  grid-template-columns: repeat(2, minmax(8rem, 14rem));
+  justify-content: center;
+  gap: 0.7rem;
 }
 
 .pairwise-actions button {

@@ -242,6 +242,13 @@ textarea:focus {
   box-shadow: 0 12px 28px rgba(245, 196, 81, 0.2);
 }
 
+.goat-corner-tag {
+  border-color: rgba(245, 196, 81, 0.72);
+  background: linear-gradient(180deg, #ffe49a, #f2bc37);
+  color: #251700;
+  box-shadow: 0 12px 28px rgba(245, 196, 81, 0.2);
+}
+
 .tag-chip {
   background: rgba(255, 255, 255, 0.09);
   color: #d6d9e1;

@@ -1,0 +1,12 @@
+.DS_Store
+.env
+.env.*
+
+.firebase/
+node_modules/
+functions/node_modules/
+
+*.pem
+*.key
+*service-account*.json
+*credentials*.json
