@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Drama Circle</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;650;750;850&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./styles.css?v=theme-toggle-2" />
+    <link id="night-mode-styles" rel="stylesheet" href="./night.css?v=theme-toggle-2" disabled />
+  </head>
+  <body>
+    <main class="app-shell">
+      <aside class="sidebar" aria-label="Drama Circle navigation">
+        <div class="brand-lockup">
+          <img class="brand-mark" src="./assets/drama-circle-logo.png" alt="" aria-hidden="true" />
+          <div>
+            <p class="eyebrow">Watch with friends</p>
+            <h1>Drama Circle</h1>
+          </div>
+        </div>
+
+        <nav class="nav-tabs" aria-label="Views">
+          <button class="tab-button active" type="button" data-view="discover">Discover</button>
+          <button class="tab-button" type="button" data-view="my-reviews">My Reviews</button>
+          <button class="tab-button" type="button" data-view="matches">Circle Picks</button>
+          <button class="tab-button" type="button" data-view="friends">Friends</button>
+        </nav>
+
+        <section class="account-panel" aria-label="Account controls">
+          <p class="eyebrow">Account</p>
+          <strong id="auth-name">Not signed in</strong>
+          <small id="auth-detail">Sign in to sync ratings with your circle.</small>
+          <form id="email-auth-form" class="email-auth-form">
+            <input id="auth-display-name" type="text" placeholder="Name for signup" autocomplete="name" />
+            <input id="auth-email" type="email" placeholder="Email" autocomplete="email" />
+            <input id="auth-password" type="password" placeholder="Password" autocomplete="current-password" />
+            <div class="auth-actions">
+              <button id="email-sign-in-button" class="account-action" type="submit">Sign in</button>
+              <button id="email-sign-up-button" class="account-action secondary" type="button">Create account</button>
+            </div>
+          </form>
+          <button id="sign-in-button" class="account-action" type="button">Sign in with Google</button>
+          <button id="sign-out-button" class="account-action secondary is-hidden" type="button">Sign out</button>
+        </section>
+
+        <section class="profile-picks" aria-labelledby="profile-picks-title">
+          <p class="eyebrow">Profile Picks</p>
+          <div class="pick-grid">
+            <form class="person-search" data-pick-type="favorite">
+              <label>
+                Favorite actor/actress
+                <input id="favorite-person-query" type="search" placeholder="Search actor or actress" autocomplete="off" />
+              </label>
+              <button type="submit">Search</button>
+              <div id="favorite-person-current" class="current-pick"></div>
+              <div id="favorite-person-results" class="person-results"></div>
+            </form>
+            <form class="person-search" data-pick-type="hottest">
+              <label>
+                Hottest actor/actress
+                <input id="hottest-person-query" type="search" placeholder="Search actor or actress" autocomplete="off" />
+              </label>
+              <button type="submit">Search</button>
+              <div id="hottest-person-current" class="current-pick"></div>
+              <div id="hottest-person-results" class="person-results"></div>
+            </form>
+            <form class="person-search" data-pick-type="goat">
+              <label>
+                GOAT drama
+                <input id="goat-drama-query" type="search" placeholder="Search a drama title" autocomplete="off" />
+              </label>
+              <button type="submit">Search</button>
+              <div id="goat-drama-current" class="current-pick"></div>
+              <div id="goat-drama-results" class="person-results"></div>
+            </form>
+          </div>
+        </section>
+
+      </aside>
+
+      <section class="workspace">
+        <header class="topbar">
+          <div>
+            <h2 id="view-title">Discover</h2>
+            <p id="view-description" class="view-description">Find friend-approved dramas that match your taste.</p>
+          </div>
+          <div id="discover-filters" class="discover-filters" aria-label="Discover filters">
+            <label>
+              Year
+              <select id="filter-year">
+                <option value="any">Any</option>
+                <option value="new">2023-now</option>
+                <option value="recent">2020-2022</option>
+                <option value="older">Before 2020</option>
+              </select>
+            </label>
+            <label>
+              Length
+              <select id="filter-episodes">
+                <option value="any">Any</option>
+                <option value="short">Short (<=12)</option>
+                <option value="standard">Standard (13-24)</option>
+                <option value="long">Long (25+)</option>
+              </select>
+            </label>
+            <label>
+              Cast
+              <select id="filter-cast">
+                <option value="any">Any</option>
+                <option value="hot">Hot cast</option>
+                <option value="favorite">Fav cast</option>
+                <option value="pick">Hot/fav cast</option>
+              </select>
+            </label>
+            <label>
+              Peer avg
+              <select id="filter-rating">
+                <option value="any">Any</option>
+                <option value="7">Good (7+)</option>
+                <option value="8">Strong (8+)</option>
+                <option value="9">Elite (9+)</option>
+              </select>
+            </label>
+          </div>
+          <button id="theme-toggle" class="theme-toggle" type="button" aria-pressed="false">Night mode</button>
+        </header>
+
+        <section class="review-panel" aria-labelledby="review-panel-title">
+          <div class="review-panel-heading">
+            <div>
+              <p class="eyebrow">Only your profile can post this</p>
+              <h2 id="review-panel-title">Add Your Drama</h2>
+            </div>
+            <span id="selected-drama-source" class="source-pill">Choose a title</span>
+          </div>
+
+          <form id="lookup-form" class="lookup-form">
+            <label>
+              Find drama
+              <input id="drama-query" type="search" placeholder="Search a title, e.g. Moving" autocomplete="off" required />
+            </label>
+            <button type="submit">Search</button>
+          </form>
+          <p id="source-status" class="data-credit">Search uses TMDb, then local starter data if the live search is unavailable.</p>
+
+          <div id="lookup-results" class="lookup-results" aria-live="polite"></div>
+          <article id="selected-drama" class="selected-drama empty-state">Search for a drama and select the right result.</article>
+
+          <form id="review-form" class="review-form">
+            <input id="selected-drama-id" type="hidden" />
+            <label>
+              Your score
+              <input id="rating" type="range" min="1" max="10" step="0.5" value="8" />
+              <output id="rating-output" for="rating">8.0</output>
+            </label>
+            <label>
+              Recommendation
+              <select id="recommendation">
+                <option value="">No recommendation yet</option>
+                <option value="must-watch">Must watch</option>
+                <option value="worth-it">Worth it</option>
+                <option value="mixed">Mixed feelings</option>
+                <option value="skip">Skip</option>
+              </select>
+            </label>
+            <label>
+              Watch status
+              <select id="watch-status">
+                <option value="finished">Finished</option>
+                <option value="watching">Still watching</option>
+                <option value="dropped">Dropped</option>
+                <option value="planned">Planned</option>
+              </select>
+            </label>
+            <button type="submit" class="primary-action">Share my review</button>
+          </form>
+
+        </section>
+
+        <section class="stats-strip" aria-label="List stats">
+          <article>
+            <span id="stat-dramas">0</span>
+            <p id="stat-dramas-label">Dramas reviewed</p>
+          </article>
+          <article>
+            <span id="stat-reviews">0</span>
+            <p id="stat-reviews-label">Reviews added</p>
+          </article>
+          <article>
+            <span id="stat-overlap">0</span>
+            <p id="stat-overlap-label">Shared with friends</p>
+          </article>
+        </section>
+
+        <section class="content-grid">
+          <section class="main-column">
+            <div id="view-content" class="view-content"></div>
+          </section>
+        </section>
+      </section>
+    </main>
+
+    <template id="drama-card-template">
+      <article class="drama-card">
+        <div class="poster" aria-hidden="true"></div>
+        <div class="card-body">
+          <div class="card-heading">
+            <div>
+              <p class="genres"></p>
+              <h3></h3>
+            </div>
+            <span class="score-pill"></span>
+          </div>
+          <p class="consensus"></p>
+          <div class="review-row"></div>
+        </div>
+      </article>
+    </template>
+
+    <script src="./app.js" type="module"></script>
+  </body>
+</html>
