@@ -46,6 +46,10 @@ const VIEW_COPY = {
     title: "Friends",
     description: "Browse each friend's list, scores, and profile picks.",
   },
+  updates: {
+    title: "Activity",
+    description: "See the latest reviews and watchlist changes from your circle.",
+  },
 };
 const firebaseConfig = {
   apiKey: "AIzaSyB4UhjyM6uIejGMk8aoTjd3JEs5DxA3LDU",
@@ -119,6 +123,7 @@ const seedState = {
   dramas: catalogFallback,
   reviews: [],
   comparisons: [],
+  activities: [],
 };
 
 let state = loadState();
@@ -159,6 +164,7 @@ let unsubscribeMembers = null;
 let unsubscribeDramas = null;
 let unsubscribeReviews = null;
 let unsubscribeComparisons = null;
+let unsubscribeActivities = null;
 
 const els = {
   authName: document.querySelector("#auth-name"),
@@ -279,6 +285,7 @@ function normalizeState(rawState) {
         status: review.status ?? "finished",
         sortOrder: review.sortOrder ?? null,
         createdAt: review.createdAt ?? new Date().toISOString(),
+        updatedAt: review.updatedAt ?? review.createdAt ?? new Date().toISOString(),
       })),
     comparisons: (rawState.comparisons ?? [])
       .filter((comparison) => !containsDemoUsers && !DEMO_USER_IDS.has(comparison.userId))
@@ -292,6 +299,17 @@ function normalizeState(rawState) {
         result: comparison.result ?? "win",
         createdAt: comparison.createdAt ?? new Date().toISOString(),
       })),
+    activities: (rawState.activities ?? [])
+      .filter((activity) => !containsDemoUsers && !DEMO_USER_IDS.has(activity.userId))
+      .map((activity) => ({
+        id: activity.id ?? crypto.randomUUID(),
+        type: activity.type ?? "review-updated",
+        userId: activity.userId,
+        dramaId: activity.dramaId,
+        before: activity.before ?? null,
+        after: activity.after ?? null,
+        createdAt: activity.createdAt ?? new Date().toISOString(),
+      })),
   };
 }
 
@@ -304,8 +322,9 @@ function applyTheme(theme) {
   document.body.classList.toggle("theme-cinematic", isNight);
   if (els.nightModeStyles) els.nightModeStyles.disabled = !isNight;
   if (els.themeToggle) {
-    els.themeToggle.textContent = isNight ? "Normal mode" : "Night mode";
     els.themeToggle.setAttribute("aria-pressed", String(isNight));
+    els.themeToggle.setAttribute("aria-label", isNight ? "Switch to normal mode" : "Switch to night mode");
+    els.themeToggle.title = isNight ? "Switch to normal mode" : "Switch to night mode";
   }
 }
 
@@ -351,6 +370,7 @@ function serializeReview(review) {
     recommendation: review.recommendation ?? "",
     status: review.status,
     sortOrder: review.sortOrder ?? null,
+    createdAt: review.createdAt ?? new Date().toISOString(),
     updatedAt: serverTimestamp(),
   };
 }
@@ -364,7 +384,8 @@ function hydrateReview(id, data) {
     recommendation: data.recommendation ?? "",
     status: data.status ?? "finished",
     sortOrder: data.sortOrder ?? null,
-    createdAt: data.updatedAt?.toDate?.().toISOString?.() ?? data.createdAt ?? new Date().toISOString(),
+    createdAt: data.createdAt ?? data.updatedAt?.toDate?.().toISOString?.() ?? new Date().toISOString(),
+    updatedAt: data.updatedAt?.toDate?.().toISOString?.() ?? data.createdAt ?? new Date().toISOString(),
   };
 }
 
@@ -390,6 +411,39 @@ function hydrateComparison(id, data) {
     loserDramaId: data.loserDramaId ?? null,
     result: data.result ?? "win",
     createdAt: data.updatedAt?.toDate?.().toISOString?.() ?? data.createdAt ?? new Date().toISOString(),
+  };
+}
+
+function reviewSnapshot(review) {
+  if (!review) return null;
+  return {
+    rating: review.rating == null ? null : Number(review.rating),
+    recommendation: review.recommendation ?? "",
+    status: review.status ?? "finished",
+  };
+}
+
+function serializeActivity(activity) {
+  return {
+    type: activity.type,
+    userId: activity.userId,
+    dramaId: activity.dramaId,
+    before: activity.before ?? null,
+    after: activity.after ?? null,
+    createdAt: activity.createdAt ?? new Date().toISOString(),
+    updatedAt: serverTimestamp(),
+  };
+}
+
+function hydrateActivity(id, data) {
+  return {
+    id,
+    type: data.type ?? "review-updated",
+    userId: data.userId,
+    dramaId: data.dramaId,
+    before: data.before ?? null,
+    after: data.after ?? null,
+    createdAt: data.createdAt ?? data.updatedAt?.toDate?.().toISOString?.() ?? new Date().toISOString(),
   };
 }
 
@@ -426,6 +480,7 @@ function startRealtimeSync(user) {
     dramas: false,
     reviews: false,
     comparisons: false,
+    activities: false,
   };
   state.activeUserId = user.uid;
   render();
@@ -485,11 +540,21 @@ function startRealtimeSync(user) {
     },
     handleSyncError,
   );
+
+  unsubscribeActivities = onSnapshot(
+    circleCollection("activities"),
+    (snapshot) => {
+      state.activities = snapshot.docs.map((activityDoc) => hydrateActivity(activityDoc.id, activityDoc.data()));
+      saveState();
+      markSyncSnapshot("activities");
+    },
+    handleSyncError,
+  );
 }
 
 function markSyncSnapshot(key) {
   syncSnapshots[key] = true;
-  syncReady = syncSnapshots.members && syncSnapshots.dramas && syncSnapshots.reviews;
+  syncReady = syncSnapshots.members && syncSnapshots.dramas && syncSnapshots.reviews && syncSnapshots.activities;
   render();
 }
 
@@ -500,11 +565,12 @@ function handleSyncError(error) {
 }
 
 function stopRealtimeSync() {
-  [unsubscribeMembers, unsubscribeDramas, unsubscribeReviews, unsubscribeComparisons].forEach((unsubscribe) => unsubscribe?.());
+  [unsubscribeMembers, unsubscribeDramas, unsubscribeReviews, unsubscribeComparisons, unsubscribeActivities].forEach((unsubscribe) => unsubscribe?.());
   unsubscribeMembers = null;
   unsubscribeDramas = null;
   unsubscribeReviews = null;
   unsubscribeComparisons = null;
+  unsubscribeActivities = null;
   syncReady = false;
   syncError = "";
   window.clearTimeout(syncTimer);
@@ -587,6 +653,10 @@ function latestReviewForUser(dramaId, userId) {
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
 }
 
+function reviewUpdatedAt(review) {
+  return new Date(review.updatedAt ?? review.createdAt ?? 0);
+}
+
 function reviewsByCurrentUser() {
   return state.reviews.filter((review) => review.userId === state.activeUserId);
 }
@@ -641,12 +711,15 @@ function compareBaseReviewedDramasForUser(userId) {
     const bReview = latestReviewForUser(b.id, userId);
     const aOrder = aReview?.sortOrder;
     const bOrder = bReview?.sortOrder;
-    if (reviewOrderModeForUser(userId) === "manual" && (aOrder != null || bOrder != null)) {
-      return (aOrder ?? Number.MAX_SAFE_INTEGER) - (bOrder ?? Number.MAX_SAFE_INTEGER);
+    if (reviewOrderModeForUser(userId) === "manual" && aOrder != null && bOrder != null) {
+      return aOrder - bOrder;
     }
     const aRating = aReview?.rating == null ? -1 : Number(aReview.rating);
     const bRating = bReview?.rating == null ? -1 : Number(bReview.rating);
     if (bRating !== aRating) return bRating - aRating;
+    if (reviewOrderModeForUser(userId) === "manual" && (aOrder != null || bOrder != null)) {
+      return (aOrder ?? Number.MAX_SAFE_INTEGER) - (bOrder ?? Number.MAX_SAFE_INTEGER);
+    }
     return new Date(bReview?.createdAt ?? 0) - new Date(aReview?.createdAt ?? 0);
   };
 }
@@ -825,6 +898,61 @@ function reviewTagText(review, ownerName, rank) {
   const score = review.rating == null ? "No score" : Number(review.rating).toFixed(1);
   const rankText = rank == null ? "Unranked" : `Rank ${ordinal(rank)}`;
   return `${ownerName} · ${score} · ${rankText} · ${statusLabel(review.status)}`;
+}
+
+function relativeTimeText(date) {
+  const elapsedSeconds = Math.max(0, Math.round((Date.now() - date.getTime()) / 1000));
+  if (elapsedSeconds < 60) return "Just now";
+  const elapsedMinutes = Math.round(elapsedSeconds / 60);
+  if (elapsedMinutes < 60) return `${elapsedMinutes}m ago`;
+  const elapsedHours = Math.round(elapsedMinutes / 60);
+  if (elapsedHours < 24) return `${elapsedHours}h ago`;
+  const elapsedDays = Math.round(elapsedHours / 24);
+  if (elapsedDays < 7) return `${elapsedDays}d ago`;
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function reviewActivityVerb(review) {
+  const createdAt = new Date(review.createdAt ?? 0);
+  const updatedAt = reviewUpdatedAt(review);
+  const isFresh = Math.abs(updatedAt.getTime() - createdAt.getTime()) < 120000;
+  if (isFresh) return "added a review";
+  return "updated a review";
+}
+
+function snapshotScoreText(snapshot) {
+  if (!snapshot) return "";
+  const score = snapshot.rating == null ? "No score" : Number(snapshot.rating).toFixed(1);
+  return `${score} / ${statusLabel(snapshot.status)} / ${recommendationLabel(snapshot.recommendation)}`;
+}
+
+function activityMetaText(activity, userNameText) {
+  return activity.type === "review-added"
+    ? `${userNameText} added this new drama`
+    : `${userNameText} updated this drama`;
+}
+
+function fallbackActivitiesFromReviews() {
+  return state.reviews.map((review) => ({
+    id: `review-${review.id}`,
+    type: reviewActivityVerb(review) === "added a review" ? "review-added" : "review-updated",
+    userId: review.userId,
+    dramaId: review.dramaId,
+    before: null,
+    after: reviewSnapshot(review),
+    createdAt: review.updatedAt ?? review.createdAt ?? new Date().toISOString(),
+  }));
+}
+
+function latestProfileActivityDate(userId) {
+  const activityDates = (state.activities ?? [])
+    .filter((activity) => activity.userId === userId)
+    .map((activity) => new Date(activity.createdAt ?? 0))
+    .filter((date) => !Number.isNaN(date.getTime()));
+  const reviewDates = reviewsByUser(userId)
+    .map((review) => reviewUpdatedAt(review))
+    .filter((date) => !Number.isNaN(date.getTime()));
+  return [...activityDates, ...reviewDates].sort((a, b) => b - a)[0] ?? null;
 }
 
 function consensusRecommendation(reviews) {
@@ -1104,11 +1232,15 @@ function renderDramaCard(drama, options = {}) {
 
   card.classList.toggle("is-compact-scan", Boolean(options.compactCard));
   card.classList.toggle("has-centered-title", Boolean(options.centerTitle));
+  card.classList.toggle("has-stable-review-area", Boolean(options.stableReviewArea));
   if (options.rankLabel) {
     const rankBadge = document.createElement("span");
     rankBadge.className = "recommendation-rank";
     rankBadge.textContent = options.rankLabel;
     card.append(rankBadge);
+  }
+  if (options.denseAfter && reviews.length >= options.denseAfter) {
+    card.classList.add("has-dense-reviews");
   }
   renderPoster(poster, drama);
   const genres = card.querySelector(".genres");
@@ -1459,6 +1591,8 @@ function renderMatches() {
         showDetails: true,
         compactDetails: true,
         compactCard: true,
+        stableReviewArea: true,
+        denseAfter: 5,
         moveGoatCalloutToTags: true,
         scoreLabel: reviews.some((review) => review.rating != null) ? averageRating(reviews).toFixed(1) : "N/A",
         scoreSubLabel: consensusRecommendation(reviews),
@@ -1598,19 +1732,96 @@ function renderFriendList() {
   );
 }
 
+function renderUpdates() {
+  setViewHeader("updates");
+  const sourceActivities = state.activities?.length ? state.activities : fallbackActivitiesFromReviews();
+  const activities = sourceActivities
+    .map((activity) => ({
+      activity,
+      drama: state.dramas.find((drama) => drama.id === activity.dramaId),
+      user: state.users.find((user) => user.id === activity.userId),
+      date: new Date(activity.createdAt ?? 0),
+    }))
+    .filter((activity) => activity.drama && activity.user)
+    .sort((a, b) => b.date - a.date)
+    .slice(0, 40);
+
+  if (!activities.length) {
+    renderEmpty("No updates yet. Once someone adds or edits a review, it will show up here.");
+    return;
+  }
+
+  const feed = document.createElement("div");
+  feed.className = "activity-feed";
+
+  activities.forEach(({ activity, drama, user, date }) => {
+    const item = document.createElement("a");
+    const poster = document.createElement("div");
+    const body = document.createElement("div");
+    const meta = document.createElement("p");
+    const title = document.createElement("h3");
+    const change = document.createElement("p");
+    const details = document.createElement("div");
+    const score = document.createElement("span");
+    const rec = document.createElement("span");
+    const status = document.createElement("span");
+    const time = document.createElement("time");
+    const after = activity.after ?? reviewSnapshot(latestReviewForUser(activity.dramaId, activity.userId));
+
+    item.className = "activity-item";
+    item.href = dramaDetailUrl(drama);
+    item.target = "_blank";
+    item.rel = "noreferrer";
+    poster.className = "activity-poster poster";
+    renderPoster(poster, drama);
+
+    body.className = "activity-body";
+    meta.className = "activity-meta";
+    meta.textContent = activityMetaText(activity, user.name);
+    title.textContent = drama.title;
+    change.className = "activity-change";
+    change.textContent = activity.before
+      ? `${snapshotScoreText(activity.before)} -> ${snapshotScoreText(after)}`
+      : snapshotScoreText(after);
+    details.className = "activity-details";
+    score.className = "activity-pill";
+    score.textContent = after?.rating == null ? "No score" : `${Number(after.rating).toFixed(1)} score`;
+    rec.className = "activity-pill";
+    rec.dataset.tone = recommendationTone(after?.recommendation ?? "");
+    rec.textContent = recommendationLabel(after?.recommendation ?? "");
+    status.className = "activity-pill";
+    status.dataset.tone = statusTone(after?.status ?? "finished");
+    status.textContent = statusLabel(after?.status ?? "finished");
+    time.className = "activity-time";
+    time.dateTime = date.toISOString();
+    time.textContent = relativeTimeText(date);
+
+    details.append(score, rec, status);
+    body.append(meta, title, change, details);
+    item.append(poster, body, time);
+    feed.append(item);
+  });
+
+  els.viewContent.replaceChildren(feed);
+}
+
 function renderFriendProfile(friend, reviews) {
   const profile = document.createElement("section");
   const header = document.createElement("div");
   const eyebrow = document.createElement("p");
   const name = document.createElement("h3");
+  const updated = document.createElement("p");
   const picks = renderFriendPicks(friend);
+  const latestDate = latestProfileActivityDate(friend?.id);
 
   profile.className = "friend-profile";
   header.className = "friend-profile-heading";
   eyebrow.className = "eyebrow";
   eyebrow.textContent = friend?.id === state.activeUserId ? "Your profile" : "Friend profile";
   name.textContent = friend?.name ?? "Friend";
-  header.append(eyebrow, name);
+  updated.className = "friend-profile-updated";
+  updated.textContent = latestDate ? `Last updated ${relativeTimeText(latestDate)}` : "No updates yet";
+  header.append(eyebrow, name, updated);
 
   profile.append(header, picks);
   return profile;
@@ -1813,6 +2024,7 @@ function render() {
   if (activeView === "my-reviews") renderMyReviews();
   else if (activeView === "matches") renderMatches();
   else if (activeView === "friends") renderFriendList();
+  else if (activeView === "updates") renderUpdates();
   else renderDiscover();
 }
 
@@ -2441,7 +2653,7 @@ els.watchStatus.addEventListener("change", updateReviewInputsForStatus);
 
 function updateReviewInputsForStatus() {
   const status = els.watchStatus.value;
-  const scoreOptional = status === "watching" || status === "planned";
+  const scoreOptional = status === "planned";
   els.rating.disabled = scoreOptional;
   els.ratingOutput.value = scoreOptional ? "No score" : Number(els.rating.value).toFixed(1);
 
@@ -2522,10 +2734,13 @@ els.reviewForm.addEventListener("submit", async (event) => {
 
   const drama = upsertDrama(selectedDrama);
   const existing = latestReviewForUser(drama.id, state.activeUserId);
+  const beforeReview = reviewSnapshot(existing);
   const isUpdate = Boolean(existing);
   const status = els.watchStatus.value;
-  const rating = status === "watching" || status === "planned" ? null : Number(els.rating.value);
+  const rating = status === "planned" ? null : Number(els.rating.value);
   const recommendation = status === "planned" ? "" : els.recommendation.value;
+  const ratingChanged = existing && Number(existing.rating ?? -1) !== Number(rating ?? -1);
+  const now = new Date().toISOString();
   const review = {
     id: `${state.activeUserId}_${drama.id}`,
     dramaId: drama.id,
@@ -2533,8 +2748,18 @@ els.reviewForm.addEventListener("submit", async (event) => {
     rating,
     recommendation,
     status,
-    sortOrder: existing?.sortOrder ?? null,
-    createdAt: new Date().toISOString(),
+    sortOrder: ratingChanged ? null : (existing?.sortOrder ?? null),
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
+  };
+  const activity = {
+    id: crypto.randomUUID(),
+    type: isUpdate ? "review-updated" : "review-added",
+    userId: state.activeUserId,
+    dramaId: drama.id,
+    before: beforeReview,
+    after: reviewSnapshot(review),
+    createdAt: now,
   };
 
   if (existing) {
@@ -2542,10 +2767,12 @@ els.reviewForm.addEventListener("submit", async (event) => {
   } else {
     state.reviews.push(review);
   }
+  state.activities = [activity, ...(state.activities ?? [])].slice(0, 100);
 
   await Promise.all([
     setDoc(circleDoc("dramas", drama.id), serializeDrama(drama), { merge: true }),
     setDoc(circleDoc("reviews", review.id), serializeReview(review), { merge: true }),
+    setDoc(circleDoc("activities", activity.id), serializeActivity(activity), { merge: true }),
   ]);
 
   reviewSubmitFeedback = isUpdate ? "Updated!" : "Shared!";
@@ -2559,7 +2786,7 @@ els.reviewForm.addEventListener("submit", async (event) => {
 });
 
 selectedDrama = null;
-applyTheme(localStorage.getItem(THEME_STORAGE_KEY) === "night" ? "night" : "normal");
+applyTheme(localStorage.getItem(THEME_STORAGE_KEY) ?? "night");
 render();
 
 onAuthStateChanged(auth, async (user) => {

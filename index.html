@@ -26,6 +26,7 @@
           <button class="tab-button" type="button" data-view="my-reviews">My Reviews</button>
           <button class="tab-button" type="button" data-view="matches">Circle Picks</button>
           <button class="tab-button" type="button" data-view="friends">Friends</button>
+          <button class="tab-button" type="button" data-view="updates">Activity</button>
         </nav>
 
         <section class="account-panel" aria-label="Account controls">
@@ -128,7 +129,11 @@
             <span class="sr-only">Search drama titles</span>
             <input id="view-search-input" type="search" placeholder="Search drama titles" autocomplete="off" />
           </label>
-          <button id="theme-toggle" class="theme-toggle" type="button" aria-pressed="false">Night mode</button>
+          <button id="theme-toggle" class="theme-toggle" type="button" aria-pressed="false">
+            <span class="theme-icon theme-icon-sun" aria-hidden="true"></span>
+            <span class="theme-icon theme-icon-moon" aria-hidden="true"></span>
+            <span class="sr-only">Toggle theme</span>
+          </button>
         </header>
 
         <section class="review-panel" aria-labelledby="review-panel-title">
